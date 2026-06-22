@@ -195,7 +195,12 @@ Do NOT emit unless truly done."
   fi
 
   # Snapshot state before the run — gates compare deltas afterward.
+  # HAVE_ITEMS guards the gates: only validate when we snapshotted a baseline.
+  # Re-testing -f "$ITEMS_FILE" at promise time would crash under set -u if the
+  # agent created items.json mid-run (B_* would be unset).
+  HAVE_ITEMS=false
   if [[ -f "$ITEMS_FILE" ]]; then
+    HAVE_ITEMS=true
     B_DONE=$(jq '[.[]|select(.done)]|length' "$ITEMS_FILE")
     B_TOTAL=$(jq 'length' "$ITEMS_FILE")
     B_HEAD=$(git rev-parse HEAD 2>/dev/null || echo none)
