@@ -82,8 +82,6 @@ PROGRESS_FILE="$STATE_DIR/progress.md"
 <!-- Each iteration appends here. Keep entries concise. -->
 EOF
 
-LOOP_TOKEN="$(date +%s)-$$"
-
 cat > "$STATE_FILE" <<EOF
 ---
 running: true
@@ -93,21 +91,22 @@ started_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 completed_at: null
 stop_reason: null
 error_count: 0
-loop_token: $LOOP_TOKEN
 ---
 
 $(echo "$PROMPT" | head -3)
 EOF
 
-# finish RUNNING REASON — set running:false, stop_reason, completed_at, then exit.
+# finish REASON CODE — set running:false, stop_reason, completed_at, then exit.
 finish() {
-  local reason="$1" code="$2"
+  local reason="$1" code="${2:-0}"
   sed -i.bak "s/^running: .*/running: false/" "$STATE_FILE"
   sed -i.bak "s/^stop_reason: .*/stop_reason: $reason/" "$STATE_FILE"
   sed -i.bak "s|^completed_at: .*|completed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)|" "$STATE_FILE"
   rm -f "$STATE_FILE.bak"
   exit "$code"
 }
+
+trap 'finish interrupted 1' INT TERM
 
 ERROR_COUNT=0
 
@@ -197,7 +196,7 @@ Do NOT emit unless truly done."
   # Dry run: show the assembled prompt for iteration 1 and bail before spawning.
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "$ITER_PROMPT"
-    exit 0
+    finish dry_run 0
   fi
 
   # Snapshot state before the run — gates compare deltas afterward.
@@ -236,14 +235,15 @@ Do NOT emit unless truly done."
   fi
   echo ""
 
-  # Check promise — custom COMPLETION_PROMISE still means "done".
+  # Detect promises: standard tags (NEXT/STOP/COMPLETE) and custom -c value.
+  # Custom promise is treated as COMPLETE so gate_ok always runs.
+  PROMISE=""
   if [[ -n "$COMPLETION_PROMISE" ]] && echo "$OUTPUT" | grep -qF "<promise>$COMPLETION_PROMISE</promise>"; then
-    echo "✅ Complete at iteration $i"
-    finish complete 0
+    PROMISE="COMPLETE"
   fi
+  STD_PROMISE=$(echo "$OUTPUT" | grep -oE '<promise>(NEXT|STOP|COMPLETE)</promise>' | tail -1 | grep -oE 'NEXT|STOP|COMPLETE' || true)
+  [[ -n "$STD_PROMISE" ]] && PROMISE="$STD_PROMISE"
 
-  # Standard promise tags: last one wins. COMPLETE=done, STOP=stuck, NEXT=continue.
-  PROMISE=$(echo "$OUTPUT" | grep -oE '<promise>(NEXT|STOP|COMPLETE)</promise>' | tail -1 | grep -oE 'NEXT|STOP|COMPLETE' || true)
   case "$PROMISE" in
     COMPLETE)
       if [[ "$HAVE_ITEMS" == true ]] && ! gate_ok complete; then

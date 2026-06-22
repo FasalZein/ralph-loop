@@ -153,7 +153,8 @@ and `items.json` done flags). Does NOT revert git commits — reset git separate
 rm -f .ralph/.stop
 printf '# Progress\n\n<!-- Each iteration appends here. Keep entries concise. -->\n' > .ralph/progress.md
 [[ -f .ralph/items.json ]] && jq 'map(.done = false)' .ralph/items.json > .ralph/items.json.tmp && mv .ralph/items.json.tmp .ralph/items.json
-"${CLAUDE_PLUGIN_ROOT}/scripts/ralph.sh" @.ralph/prompt.md -c COMPLETE -n 20
+N="$(sed -n 's/^max_iterations: //p' .ralph/loop.md 2>/dev/null | head -1)"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ralph.sh" @.ralph/prompt.md -c COMPLETE -n "${N:-20}"
 ```
 
 ## Architecture
