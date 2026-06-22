@@ -96,11 +96,18 @@ When ALL items are complete and verified:
 
 ## Mode 2: Direct loop (quick tasks)
 
-For focused tasks that don't need a plan (fix one bug, run one refactor):
+For focused tasks that don't need a plan (fix one bug, run one refactor).
+Only use this when the user passes explicit flags like `-c DONE -n 10`:
 
-```!
+```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/ralph.sh" $ARGUMENTS
 ```
+
+## Routing
+
+- If the user describes a task ("build X", "refactor Y", "add feature Z") → **Mode 1** (plan first)
+- If the user passes flags (`-c`, `-n`, `@.ralph/prompt.md`) → **Mode 2** (direct loop)
+- If unsure → **Mode 1** (plan is always safer)
 
 ## After completion
 
