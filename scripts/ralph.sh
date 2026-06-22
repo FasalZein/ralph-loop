@@ -212,7 +212,7 @@ Do NOT emit unless truly done."
   if [[ "$HERDR" == "true" ]] && command -v herdr &>/dev/null; then
     # Spawn a visible pane — user watches the agent work live
     AGENT_NAME="ralph-$i"
-    PANE_ID=$(herdr agent start "$AGENT_NAME" --split down --no-focus -- "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>/dev/null | grep -o 'pane_[^ ]*' || true)
+    PANE_ID=$(herdr agent start "$AGENT_NAME" --split right --no-focus -- "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>/dev/null | grep -o 'pane_[^ ]*' || true)
     if [[ -n "$PANE_ID" ]]; then
       herdr agent wait "$AGENT_NAME" --status idle --timeout 300000 2>/dev/null || true
       OUTPUT=$(herdr agent read "$AGENT_NAME" --source recent-unwrapped --lines 200 2>/dev/null) || true
