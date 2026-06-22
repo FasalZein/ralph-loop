@@ -15,3 +15,8 @@
 - Fix: snapshot a HAVE_ITEMS flag; gate calls now check HAVE_ITEMS instead of
   re-statting the file. Files: scripts/ralph.sh.
 - Verified: `bash -n scripts/ralph.sh && bash -n scripts/claude-ralph` → OK.
+
+## Iteration 2
+- Orientation: all 4 plan items [x]. Re-ran full verification.
+- `bash -n` both scripts → SYNTAX OK. All 6 skills/*/SKILL.md have valid `---` frontmatter.
+- No incomplete items, no issues found. Plan complete.
