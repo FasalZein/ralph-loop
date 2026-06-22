@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# claude-ralph — the leanest possible claude for loop iterations.
+# ponytail: no plugins, no MCP, no skills, no output-style, minimal system prompt.
+# Token budget: ~200 tokens system prompt vs claude-basic's ~400.
+
+exec claude \
+  --dangerously-skip-permissions \
+  --model "${CLAUDE_RALPH_MODEL:-claude-opus-4-8[1m]}" \
+  --effort "${CLAUDE_RALPH_EFFORT:-low}" \
+  --append-system-prompt "You are a coding agent in a Ralph loop. Do one unit of work per iteration. Read files, make changes, run tests. Be terse. When done, emit the completion tag you were given." \
+  --strict-mcp-config \
+  --mcp-config '{"mcpServers":{}}' \
+  --settings '{"enabledPlugins":{}}' \
+  --tools "Bash,Read,Edit,Write,Skill" \
+  --exclude-dynamic-system-prompt-sections \
+  "$@"
