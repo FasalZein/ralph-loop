@@ -37,6 +37,21 @@ Creates a `.ralph/` bundle that decomposes a task into loopable items. This is t
 State what "done" means. No placeholders. Full implementations.
 ```
 
+### `.ralph/items.json`
+
+Machine-readable mirror of the plan items. The loop validates promises against
+this file: a NEXT promise must flip ≥1 item to `done`, COMPLETE requires all
+done. One object per plan item, same order, all `done: false` to start.
+
+```json
+[
+  { "id": 1, "text": "Item description (matches plan.md)", "done": false },
+  { "id": 2, "text": "...", "done": false }
+]
+```
+
+Each iteration's agent flips its item's `done` to `true` after verification.
+
 ### `.ralph/prompt.md`
 
 The prompt fed every iteration. Template:
@@ -53,7 +68,8 @@ You are in a Ralph loop. Each iteration is a fresh context window.
 7. Run verification: [EXACT COMMANDS]
 8. If tests fail, fix before moving on
 9. Append to .ralph/progress.md: what you did, decisions made, files changed
-10. git add changed files, git commit with descriptive message
+10. Flip your item's "done" to true in .ralph/items.json (jq)
+11. git add changed files, git commit with descriptive message
 
 ONE item per iteration. Do NOT skip ahead.
 
@@ -77,3 +93,4 @@ When ALL items are complete and verified:
 - **Exact verification.** Not "run tests" — the actual command path.
 - **10-25 items max.** If more, you're over-specifying. If fewer, items are too big.
 - **Search before create.** Always instruct the agent to check existing code.
+- **Keep items.json in sync with plan.md.** Same items, same order, one object each.

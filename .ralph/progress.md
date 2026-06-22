@@ -45,3 +45,10 @@ Decision: resume/restart relaunch ralph.sh (which resets iteration:0); real
 progress lives in progress.md + git, so the counter reset is cosmetic. Kept lazy
 — no new ralph.sh flags needed. Verified jq/sed snippets on a fixture.
 Files: skills/ralph-stop/, ralph-status/, ralph-resume/, ralph-restart/.
+
+## Iteration 5 — ralph-plan generates items.json
+Added `.ralph/items.json` to the bundle the ralph-plan skill writes. Shape
+matches what ralph.sh validates: `[{"id":N,"text":"...","done":bool}]`, one per
+plan.md item, same order, all done:false at start. Updated the prompt.md
+template (new step 10: flip done via jq) and added a sync rule. Closes the last
+scope item — ralph.sh's gates now have a generator. Files: skills/ralph-plan/SKILL.md.
