@@ -215,16 +215,39 @@ Do NOT emit unless truly done."
   # Run — fresh process, fresh context, zero parent bleed
   RUN_RC=0
   if [[ "$HERDR" == "true" ]] && command -v herdr &>/dev/null; then
-    # Run locally with tee to file. Open a herdr pane that tails the file for live viewing.
-    ITER_OUT="$STATE_DIR/.iter-$i.out"
+    # Run claude-ralph INSIDE the herdr pane so the user sees the agent live.
+    # A runner script handles prompt passing (avoids quoting hell in herdr pane run).
+    ABS_CWD="$(pwd)"
+    ITER_OUT="$ABS_CWD/$STATE_DIR/.iter-$i.out"
+    ITER_DONE="$ABS_CWD/$STATE_DIR/.iter-$i.done"
+    ITER_SCRIPT="$ABS_CWD/$STATE_DIR/.iter-run.sh"
+    ITER_PROMPT_FILE="$ABS_CWD/$STATE_DIR/.iter-prompt.tmp"
     : > "$ITER_OUT"
+    rm -f "$ITER_DONE"
+    printf '%s' "$ITER_PROMPT" > "$ITER_PROMPT_FILE"
+    cat > "$ITER_SCRIPT" <<RUNNER
+#!/usr/bin/env bash
+cd "$ABS_CWD"
+export CLAUDE_RALPH_MODEL="${MODEL:-}"
+export CLAUDE_RALPH_EFFORT="${EFFORT:-}"
+"${CLAUDE_RALPH}" -p "\$(cat '$ITER_PROMPT_FILE')" --max-budget-usd "${BUDGET}" 2>&1 | tee "${ITER_OUT}"
+echo \$? > "${ITER_DONE}"
+RUNNER
+    chmod +x "$ITER_SCRIPT"
     PANE_ID=$(herdr pane split --direction right --no-focus 2>/dev/null \
       | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
-    [[ -n "$PANE_ID" ]] && herdr pane run "$PANE_ID" "tail -f $ITER_OUT" 2>/dev/null || true
-    "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1 | tee "$ITER_OUT" || RUN_RC=$?
-    OUTPUT=$(cat "$ITER_OUT") || true
-    rm -f "$ITER_OUT"
-    [[ -n "$PANE_ID" ]] && herdr pane close "$PANE_ID" 2>/dev/null || true
+    if [[ -n "$PANE_ID" ]]; then
+      herdr pane run "$PANE_ID" "bash '$ITER_SCRIPT'" 2>/dev/null || true
+      while [[ ! -f "$ITER_DONE" ]]; do sleep 2; done
+      RUN_RC=$(cat "$ITER_DONE" 2>/dev/null) || RUN_RC=1
+      OUTPUT=$(cat "$ITER_OUT") || true
+      rm -f "$ITER_OUT" "$ITER_DONE" "$ITER_SCRIPT" "$ITER_PROMPT_FILE"
+      herdr pane close "$PANE_ID" 2>/dev/null || true
+    else
+      "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1 | tee "$ITER_OUT" || RUN_RC=$?
+      OUTPUT=$(cat "$ITER_OUT") || true
+      rm -f "$ITER_OUT"
+    fi
   else
     OUTPUT=$("$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
   fi
