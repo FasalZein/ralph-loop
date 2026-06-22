@@ -3,6 +3,6 @@
   "displayName": "Ralph Loop",
   "version": "0.2.0",
   "description": "Spawns isolated claude sessions to iterate on tasks — zero token cost to the parent session",
-  "author": "FasalZein",
+  "author": { "name": "FasalZein" },
   "repository": "https://github.com/FasalZein/ralph-loop"
 }
