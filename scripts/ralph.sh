@@ -253,7 +253,7 @@ Do NOT emit unless truly done."
   PROMISE=$(echo "$OUTPUT" | grep -oE '<promise>(NEXT|STOP|COMPLETE)</promise>' | tail -1 | grep -oE 'NEXT|STOP|COMPLETE' || true)
   case "$PROMISE" in
     COMPLETE)
-      if [[ -f "$ITEMS_FILE" ]] && ! gate_ok complete; then
+      if [[ "$HAVE_ITEMS" == true ]] && ! gate_ok complete; then
         bump_errors
         echo "↩︎ COMPLETE rejected at iteration $i — continuing (error_count: $ERROR_COUNT)"
       else
@@ -264,7 +264,7 @@ Do NOT emit unless truly done."
       echo "🛑 Stuck at iteration $i (<promise>STOP</promise>)"
       finish stuck 1 ;;
     NEXT)
-      if [[ -f "$ITEMS_FILE" ]] && ! gate_ok next; then
+      if [[ "$HAVE_ITEMS" == true ]] && ! gate_ok next; then
         bump_errors
         echo "→ NEXT at iteration $i — gate warning (error_count: $ERROR_COUNT)"
       else
