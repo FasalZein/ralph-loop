@@ -224,8 +224,7 @@ Do NOT emit unless truly done."
   # Run — fresh process, fresh context, zero parent bleed
   RUN_RC=0
   if [[ "$HERDR" == "true" ]] && command -v herdr &>/dev/null; then
-    # Run claude-ralph INSIDE the herdr pane so the user sees the agent live.
-    # A runner script handles prompt passing (avoids quoting hell in herdr pane run).
+    # New tab per iteration — user sees the live claude-ralph session.
     ABS_CWD="$(pwd)"
     ITER_OUT="$ABS_CWD/$STATE_DIR/.iter-$i.out"
     ITER_DONE="$ABS_CWD/$STATE_DIR/.iter-$i.done"
@@ -243,15 +242,17 @@ export CLAUDE_RALPH_EFFORT="${EFFORT:-}"
 echo \$? > "${ITER_DONE}"
 RUNNER
     chmod +x "$ITER_SCRIPT"
-    PANE_ID=$(herdr pane split --direction right --no-focus 2>/dev/null \
-      | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+    TAB_JSON=$(herdr tab create --cwd "$ABS_CWD" --label "ralph iter $i" --no-focus 2>/dev/null || true)
+    PANE_ID=$(echo "$TAB_JSON" | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+    TAB_ID=$(echo "$TAB_JSON" | grep -o '"tab_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
     if [[ -n "$PANE_ID" ]]; then
+      sleep 0.5
       herdr pane run "$PANE_ID" "bash '$ITER_SCRIPT'" 2>/dev/null || true
       while [[ ! -f "$ITER_DONE" ]]; do sleep 2; done
       RUN_RC=$(cat "$ITER_DONE" 2>/dev/null) || RUN_RC=1
       OUTPUT=$(cat "$ITER_OUT") || true
       rm -f "$ITER_OUT" "$ITER_DONE" "$ITER_SCRIPT" "$ITER_PROMPT_FILE"
-      herdr pane close "$PANE_ID" 2>/dev/null || true
+      [[ -n "$TAB_ID" ]] && herdr tab close "$TAB_ID" 2>/dev/null || true
     else
       "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1 | tee "$ITER_OUT" || RUN_RC=$?
       OUTPUT=$(cat "$ITER_OUT") || true

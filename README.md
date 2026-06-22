@@ -6,6 +6,10 @@ long-running task costs **zero tokens** in your parent session. State lives on
 disk (`.ralph/`, git commits, modified files) — every iteration reads prior work
 from the filesystem, not from context.
 
+Based on [pi-ralph-loop](https://github.com/edxeth/pi-ralph-loop) by
+[@edxeth](https://github.com/edxeth) — the reference TypeScript implementation
+for the Pi platform. This is a Claude Code plugin port of the same architecture.
+
 Named after [Geoffrey Huntley's "Ralph Wiggum" technique](https://ghuntley.com/ralph/):
 run the same prompt in a loop until the work is done.
 
@@ -73,7 +77,8 @@ For a focused task that doesn't need a plan:
 | `--model MODEL` | model for iterations |
 | `--effort LEVEL` | reasoning effort |
 | `--verbose` | stream iteration output |
-| `--herdr` | spawn iterations in multiplexer panes |
+| `--herdr` | spawn iterations in herdr tabs (live agent view) |
+| `--dry-run` | print iteration 1 prompt and exit (debug prompts) |
 
 ### Control operations
 
