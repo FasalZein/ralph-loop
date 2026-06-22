@@ -76,8 +76,7 @@ For a focused task that doesn't need a plan:
 | `--budget USD` | per-iteration USD cap (default 2) |
 | `--model MODEL` | model for iterations |
 | `--effort LEVEL` | reasoning effort |
-| `--verbose` | stream iteration output |
-| `--herdr` | spawn iterations in herdr tabs (live agent view) |
+| `--verbose` | full output per iteration |
 | `--dry-run` | print iteration 1 prompt and exit (debug prompts) |
 
 ### Control operations

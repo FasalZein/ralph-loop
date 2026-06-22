@@ -1,7 +1,7 @@
 ---
 name: ralph-loop
 description: "Spawn isolated claude sessions to iterate on a task until done. Use when user wants to ralph-loop, run an autonomous loop, iterate until tests pass, build something AFK, or plan/stop/check/resume/restart such a loop."
-argument-hint: "PROMPT [-n MAX] [-c PROMISE] [--budget USD] [--model MODEL] [--effort LEVEL] [--verbose] [--herdr]"
+argument-hint: "PROMPT [-n MAX] [-c PROMISE] [--budget USD] [--model MODEL] [--effort LEVEL] [--verbose] [--dry-run]"
 ---
 
 # Ralph Loop
@@ -167,5 +167,4 @@ This session (main claude) ─── creates plan ──► .ralph/ bundle
 ```
 
 - `claude-ralph`: lean wrapper — no plugins/MCP, Bash/Read/Edit/Write/Skill, effort:low
-- `--herdr` flag spawns iterations in multiplexer panes
 - `--dry-run` prints the assembled iteration-1 prompt and exits (debug prompts before looping)
