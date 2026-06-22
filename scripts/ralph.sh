@@ -111,6 +111,33 @@ finish() {
 
 ERROR_COUNT=0
 
+# Optional items.json — shape: [{"id":N,"text":"...","done":bool}, ...]
+# When present, terminal promises are validated against item/progress/git deltas.
+ITEMS_FILE="$STATE_DIR/items.json"
+
+bump_errors() {
+  ERROR_COUNT=$((ERROR_COUNT + 1))
+  sed -i.bak "s/^error_count: .*/error_count: $ERROR_COUNT/" "$STATE_FILE" && rm -f "$STATE_FILE.bak"
+}
+
+# gate_ok KIND — KIND=next|complete. Compares post-run state to B_* snapshot.
+# Echoes reasons + returns 1 on failure. Requires ITEMS_FILE to exist.
+gate_ok() {
+  local kind="$1" reason="" a_done a_head a_prog
+  a_done=$(jq '[.[]|select(.done)]|length' "$ITEMS_FILE")
+  a_head=$(git rev-parse HEAD 2>/dev/null || echo none)
+  a_prog=$(wc -l < "$PROGRESS_FILE")
+  [[ "$a_head" == "$B_HEAD" ]] && reason+="HEAD unchanged; "
+  [[ "$a_prog" -le "$B_PROG" ]] && reason+="progress.md did not grow; "
+  if [[ "$kind" == complete ]]; then
+    [[ "$a_done" -lt "$B_TOTAL" ]] && reason+="only $a_done/$B_TOTAL items done; "
+  else
+    [[ "$a_done" -le "$B_DONE" ]] && reason+="no item flipped done; "
+  fi
+  [[ -n "$reason" ]] && { echo "⚠️  gate failed: $reason"; return 1; }
+  return 0
+}
+
 echo "🔄 Ralph loop"
 echo "   iterations: max $MAX_ITERATIONS | budget: \$$BUDGET/iter"
 [[ -n "$COMPLETION_PROMISE" ]] && echo "   promise: <promise>$COMPLETION_PROMISE</promise>"
@@ -167,6 +194,14 @@ When ALL items complete and verified: <promise>$COMPLETION_PROMISE</promise>
 Do NOT emit unless truly done."
   fi
 
+  # Snapshot state before the run — gates compare deltas afterward.
+  if [[ -f "$ITEMS_FILE" ]]; then
+    B_DONE=$(jq '[.[]|select(.done)]|length' "$ITEMS_FILE")
+    B_TOTAL=$(jq 'length' "$ITEMS_FILE")
+    B_HEAD=$(git rev-parse HEAD 2>/dev/null || echo none)
+    B_PROG=$(wc -l < "$PROGRESS_FILE")
+  fi
+
   # Build args
   RALPH_ARGS=(-p "$ITER_PROMPT" --max-budget-usd "$BUDGET")
   [[ -n "$MODEL" ]] && export CLAUDE_RALPH_MODEL="$MODEL"
@@ -182,8 +217,7 @@ Do NOT emit unless truly done."
 
   # Track iteration errors (non-zero claude-ralph exit).
   if [[ "$RUN_RC" -ne 0 ]]; then
-    ERROR_COUNT=$((ERROR_COUNT + 1))
-    sed -i.bak "s/^error_count: .*/error_count: $ERROR_COUNT/" "$STATE_FILE" && rm -f "$STATE_FILE.bak"
+    bump_errors
     echo "⚠️  iteration $i exited $RUN_RC (error_count: $ERROR_COUNT)"
   fi
 
@@ -205,13 +239,23 @@ Do NOT emit unless truly done."
   PROMISE=$(echo "$OUTPUT" | grep -oE '<promise>(NEXT|STOP|COMPLETE)</promise>' | tail -1 | grep -oE 'NEXT|STOP|COMPLETE' || true)
   case "$PROMISE" in
     COMPLETE)
-      echo "✅ Complete at iteration $i (<promise>COMPLETE</promise>)"
-      finish complete 0 ;;
+      if [[ -f "$ITEMS_FILE" ]] && ! gate_ok complete; then
+        bump_errors
+        echo "↩︎ COMPLETE rejected at iteration $i — continuing (error_count: $ERROR_COUNT)"
+      else
+        echo "✅ Complete at iteration $i (<promise>COMPLETE</promise>)"
+        finish complete 0
+      fi ;;
     STOP)
       echo "🛑 Stuck at iteration $i (<promise>STOP</promise>)"
       finish stuck 1 ;;
     NEXT)
-      echo "→ NEXT (iteration $i done)" ;;
+      if [[ -f "$ITEMS_FILE" ]] && ! gate_ok next; then
+        bump_errors
+        echo "→ NEXT at iteration $i — gate warning (error_count: $ERROR_COUNT)"
+      else
+        echo "→ NEXT (iteration $i done)"
+      fi ;;
   esac
 done
 
