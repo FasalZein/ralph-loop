@@ -210,7 +210,17 @@ Do NOT emit unless truly done."
   # Run — fresh process, fresh context, zero parent bleed
   RUN_RC=0
   if [[ "$HERDR" == "true" ]] && command -v herdr &>/dev/null; then
-    OUTPUT=$(herdr pane split --direction down -- "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
+    # Spawn a visible pane — user watches the agent work live
+    AGENT_NAME="ralph-$i"
+    PANE_ID=$(herdr agent start "$AGENT_NAME" --split down --no-focus -- "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>/dev/null | grep -o 'pane_[^ ]*' || true)
+    if [[ -n "$PANE_ID" ]]; then
+      herdr agent wait "$AGENT_NAME" --status idle --timeout 300000 2>/dev/null || true
+      OUTPUT=$(herdr agent read "$AGENT_NAME" --source recent-unwrapped --lines 200 2>/dev/null) || true
+      herdr pane close "$PANE_ID" 2>/dev/null || true
+    else
+      # Fallback if herdr agent start didn't return a pane id
+      OUTPUT=$("$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
+    fi
   else
     OUTPUT=$("$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
   fi
