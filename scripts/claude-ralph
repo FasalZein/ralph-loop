@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # claude-ralph — the leanest possible claude for loop iterations.
-# ponytail: no plugins, no MCP, no skills, no output-style, minimal system prompt.
+# ponytail: no plugins, no MCP, no output-style, minimal system prompt. Skill tool stays on for discovery.
 # Token budget: ~200 tokens system prompt vs claude-basic's ~400.
 
 exec claude \

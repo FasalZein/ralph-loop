@@ -210,17 +210,16 @@ Do NOT emit unless truly done."
   # Run — fresh process, fresh context, zero parent bleed
   RUN_RC=0
   if [[ "$HERDR" == "true" ]] && command -v herdr &>/dev/null; then
-    # Spawn a visible pane — user watches the agent work live
-    AGENT_NAME="ralph-$i"
-    PANE_ID=$(herdr agent start "$AGENT_NAME" --split right --no-focus -- "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>/dev/null | grep -o 'pane_[^ ]*' || true)
-    if [[ -n "$PANE_ID" ]]; then
-      herdr agent wait "$AGENT_NAME" --status idle --timeout 300000 2>/dev/null || true
-      OUTPUT=$(herdr agent read "$AGENT_NAME" --source recent-unwrapped --lines 200 2>/dev/null) || true
-      herdr pane close "$PANE_ID" 2>/dev/null || true
-    else
-      # Fallback if herdr agent start didn't return a pane id
-      OUTPUT=$("$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
-    fi
+    # Run locally with tee to file. Open a herdr pane that tails the file for live viewing.
+    ITER_OUT="$STATE_DIR/.iter-$i.out"
+    : > "$ITER_OUT"
+    PANE_ID=$(herdr pane split --direction right --no-focus 2>/dev/null \
+      | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+    [[ -n "$PANE_ID" ]] && herdr pane run "$PANE_ID" "tail -f $ITER_OUT" 2>/dev/null || true
+    "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1 | tee "$ITER_OUT" || RUN_RC=$?
+    OUTPUT=$(cat "$ITER_OUT") || true
+    rm -f "$ITER_OUT"
+    [[ -n "$PANE_ID" ]] && herdr pane close "$PANE_ID" 2>/dev/null || true
   else
     OUTPUT=$("$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
   fi
