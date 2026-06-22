@@ -82,17 +82,34 @@ PROGRESS_FILE="$STATE_DIR/progress.md"
 <!-- Each iteration appends here. Keep entries concise. -->
 EOF
 
+LOOP_TOKEN="$(date +%s)-$$"
+
 cat > "$STATE_FILE" <<EOF
 ---
 running: true
 iteration: 0
 max_iterations: $MAX_ITERATIONS
 started_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+completed_at: null
 stop_reason: null
+error_count: 0
+loop_token: $LOOP_TOKEN
 ---
 
 $(echo "$PROMPT" | head -3)
 EOF
+
+# finish RUNNING REASON — set running:false, stop_reason, completed_at, then exit.
+finish() {
+  local reason="$1" code="$2"
+  sed -i.bak "s/^running: .*/running: false/" "$STATE_FILE"
+  sed -i.bak "s/^stop_reason: .*/stop_reason: $reason/" "$STATE_FILE"
+  sed -i.bak "s|^completed_at: .*|completed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)|" "$STATE_FILE"
+  rm -f "$STATE_FILE.bak"
+  exit "$code"
+}
+
+ERROR_COUNT=0
 
 echo "🔄 Ralph loop"
 echo "   iterations: max $MAX_ITERATIONS | budget: \$$BUDGET/iter"
@@ -105,10 +122,7 @@ for ((i=1; i<=MAX_ITERATIONS; i++)); do
   if [[ -f "$STATE_DIR/.stop" ]]; then
     echo "🛑 Stop requested (found .ralph/.stop)"
     rm -f "$STATE_DIR/.stop"
-    sed -i.bak 's/^running: .*/running: false/' "$STATE_FILE"
-    sed -i.bak 's/^stop_reason: .*/stop_reason: manual_stop/' "$STATE_FILE"
-    rm -f "$STATE_FILE.bak"
-    exit 0
+    finish manual_stop 0
   fi
 
   # Update state
@@ -159,10 +173,18 @@ Do NOT emit unless truly done."
   [[ -n "$EFFORT" ]] && export CLAUDE_RALPH_EFFORT="$EFFORT"
 
   # Run — fresh process, fresh context, zero parent bleed
+  RUN_RC=0
   if [[ "$HERDR" == "true" ]] && command -v herdr &>/dev/null; then
-    OUTPUT=$(herdr pane split --direction down -- "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || true
+    OUTPUT=$(herdr pane split --direction down -- "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
   else
-    OUTPUT=$("$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || true
+    OUTPUT=$("$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
+  fi
+
+  # Track iteration errors (non-zero claude-ralph exit).
+  if [[ "$RUN_RC" -ne 0 ]]; then
+    ERROR_COUNT=$((ERROR_COUNT + 1))
+    sed -i.bak "s/^error_count: .*/error_count: $ERROR_COUNT/" "$STATE_FILE" && rm -f "$STATE_FILE.bak"
+    echo "⚠️  iteration $i exited $RUN_RC (error_count: $ERROR_COUNT)"
   fi
 
   # Display
@@ -176,10 +198,7 @@ Do NOT emit unless truly done."
   # Check promise — custom COMPLETION_PROMISE still means "done".
   if [[ -n "$COMPLETION_PROMISE" ]] && echo "$OUTPUT" | grep -qF "<promise>$COMPLETION_PROMISE</promise>"; then
     echo "✅ Complete at iteration $i"
-    sed -i.bak 's/^running: .*/running: false/' "$STATE_FILE"
-    sed -i.bak 's/^stop_reason: .*/stop_reason: complete/' "$STATE_FILE"
-    rm -f "$STATE_FILE.bak"
-    exit 0
+    finish complete 0
   fi
 
   # Standard promise tags: last one wins. COMPLETE=done, STOP=stuck, NEXT=continue.
@@ -187,23 +206,14 @@ Do NOT emit unless truly done."
   case "$PROMISE" in
     COMPLETE)
       echo "✅ Complete at iteration $i (<promise>COMPLETE</promise>)"
-      sed -i.bak 's/^running: .*/running: false/' "$STATE_FILE"
-      sed -i.bak 's/^stop_reason: .*/stop_reason: complete/' "$STATE_FILE"
-      rm -f "$STATE_FILE.bak"
-      exit 0 ;;
+      finish complete 0 ;;
     STOP)
       echo "🛑 Stuck at iteration $i (<promise>STOP</promise>)"
-      sed -i.bak 's/^running: .*/running: false/' "$STATE_FILE"
-      sed -i.bak 's/^stop_reason: .*/stop_reason: stuck/' "$STATE_FILE"
-      rm -f "$STATE_FILE.bak"
-      exit 1 ;;
+      finish stuck 1 ;;
     NEXT)
       echo "→ NEXT (iteration $i done)" ;;
   esac
 done
 
 echo "🛑 Max iterations ($MAX_ITERATIONS) reached"
-sed -i.bak 's/^running: .*/running: false/' "$STATE_FILE"
-sed -i.bak 's/^stop_reason: .*/stop_reason: max_iterations/' "$STATE_FILE"
-rm -f "$STATE_FILE.bak"
-exit 0
+finish max_iterations 0
