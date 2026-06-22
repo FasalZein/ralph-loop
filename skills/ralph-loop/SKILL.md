@@ -168,3 +168,4 @@ This session (main claude) ─── creates plan ──► .ralph/ bundle
 
 - `claude-ralph`: lean wrapper — no plugins/MCP, Bash/Read/Edit/Write/Skill, effort:low
 - `--herdr` flag spawns iterations in multiplexer panes
+- `--dry-run` prints the assembled iteration-1 prompt and exits (debug prompts before looping)

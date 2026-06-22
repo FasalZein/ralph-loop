@@ -15,6 +15,7 @@ MODEL=""
 EFFORT=""
 VERBOSE=false
 HERDR=false
+DRY_RUN=false
 PROMPT_PARTS=()
 
 while [[ $# -gt 0 ]]; do
@@ -26,6 +27,7 @@ while [[ $# -gt 0 ]]; do
     --effort) EFFORT="$2"; shift 2 ;;
     --verbose|-v) VERBOSE=true; shift ;;
     --herdr) HERDR=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
     -h|--help)
       cat <<'EOF'
 ralph-loop — iterate a task with isolated claude sessions
@@ -40,6 +42,7 @@ Options:
   -m, --model MODEL            Override model
   --effort LEVEL               Override effort (low/medium/high)
   --herdr                      Spawn in herdr pane (multiplexed)
+  --dry-run                    Print iteration 1 prompt and exit (no run)
   -v, --verbose                Full output per iteration
   -h, --help                   This message
 
@@ -192,6 +195,12 @@ You are in a fresh session — no memory of prior iterations.
 
 When ALL items complete and verified: <promise>$COMPLETION_PROMISE</promise>
 Do NOT emit unless truly done."
+  fi
+
+  # Dry run: show the assembled prompt for iteration 1 and bail before spawning.
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "$ITER_PROMPT"
+    exit 0
   fi
 
   # Snapshot state before the run — gates compare deltas afterward.
