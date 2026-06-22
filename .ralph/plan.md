@@ -2,10 +2,10 @@
 
 ## Items (priority order)
 
-1. [ ] Review scripts/ralph.sh — code quality, edge cases, robustness
-2. [ ] Review skills/ — all SKILL.md files for correctness, consistency, and completeness
-3. [ ] Review scripts/claude-ralph — wrapper flags, token optimization
-4. [ ] Final polish — fix anything found in reviews, verify bash syntax across all scripts
+1. [x] Review scripts/ralph.sh — reviewed, no changes needed
+2. [x] Review skills/ — all frontmatter valid
+3. [x] Review scripts/claude-ralph — fixed stale "no skills" comment
+4. [x] Final polish — bash syntax verified across all scripts
 
 ## Verification
 - `bash -n scripts/ralph.sh` — no syntax errors
