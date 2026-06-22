@@ -67,9 +67,9 @@ For a focused task that doesn't need a plan:
 
 | Flag | Meaning |
 |------|---------|
-| `-n MAX` | max iterations (default 20) |
+| `-n MAX` | max iterations (default 30) |
 | `-c PROMISE` | completion promise the loop watches for (e.g. `DONE`, `COMPLETE`) |
-| `--budget USD` | stop when spend exceeds this |
+| `--budget USD` | per-iteration USD cap (default 2) |
 | `--model MODEL` | model for iterations |
 | `--effort LEVEL` | reasoning effort |
 | `--verbose` | stream iteration output |
