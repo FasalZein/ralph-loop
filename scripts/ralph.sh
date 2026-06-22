@@ -224,13 +224,12 @@ Do NOT emit unless truly done."
   # Run — fresh process, fresh context, zero parent bleed
   RUN_RC=0
   if [[ "$HERDR" == "true" ]] && command -v herdr &>/dev/null; then
-    # New tab per iteration — user sees the live claude-ralph session.
+    # New tab in same workspace — runs claude-ralph -p so it auto-exits.
+    # Output streams visibly in the tab; scraped via herdr pane read afterward.
     ABS_CWD="$(pwd)"
-    ITER_OUT="$ABS_CWD/$STATE_DIR/.iter-$i.out"
     ITER_DONE="$ABS_CWD/$STATE_DIR/.iter-$i.done"
     ITER_SCRIPT="$ABS_CWD/$STATE_DIR/.iter-run.sh"
     ITER_PROMPT_FILE="$ABS_CWD/$STATE_DIR/.iter-prompt.tmp"
-    : > "$ITER_OUT"
     rm -f "$ITER_DONE"
     printf '%s' "$ITER_PROMPT" > "$ITER_PROMPT_FILE"
     cat > "$ITER_SCRIPT" <<RUNNER
@@ -238,11 +237,14 @@ Do NOT emit unless truly done."
 cd "$ABS_CWD"
 export CLAUDE_RALPH_MODEL="${MODEL:-}"
 export CLAUDE_RALPH_EFFORT="${EFFORT:-}"
-"${CLAUDE_RALPH}" -p "\$(cat '$ITER_PROMPT_FILE')" --max-budget-usd "${BUDGET}" 2>&1 | tee "${ITER_OUT}"
+"${CLAUDE_RALPH}" -p "\$(cat '$ITER_PROMPT_FILE')" --max-budget-usd "${BUDGET}"
 echo \$? > "${ITER_DONE}"
 RUNNER
     chmod +x "$ITER_SCRIPT"
-    TAB_JSON=$(herdr tab create --cwd "$ABS_CWD" --label "ralph iter $i" --no-focus 2>/dev/null || true)
+    HERDR_WS=$(herdr pane current 2>/dev/null | grep -o '"workspace_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+    HERDR_TAB_ARGS=(--cwd "$ABS_CWD" --label "ralph iter $i" --no-focus)
+    [[ -n "$HERDR_WS" ]] && HERDR_TAB_ARGS+=(--workspace "$HERDR_WS")
+    TAB_JSON=$(herdr tab create "${HERDR_TAB_ARGS[@]}" 2>/dev/null || true)
     PANE_ID=$(echo "$TAB_JSON" | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
     TAB_ID=$(echo "$TAB_JSON" | grep -o '"tab_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
     if [[ -n "$PANE_ID" ]]; then
@@ -250,13 +252,11 @@ RUNNER
       herdr pane run "$PANE_ID" "bash '$ITER_SCRIPT'" 2>/dev/null || true
       while [[ ! -f "$ITER_DONE" ]]; do sleep 2; done
       RUN_RC=$(cat "$ITER_DONE" 2>/dev/null) || RUN_RC=1
-      OUTPUT=$(cat "$ITER_OUT") || true
-      rm -f "$ITER_OUT" "$ITER_DONE" "$ITER_SCRIPT" "$ITER_PROMPT_FILE"
+      OUTPUT=$(herdr pane read "$PANE_ID" --source visible 2>/dev/null || true)
+      rm -f "$ITER_DONE" "$ITER_SCRIPT" "$ITER_PROMPT_FILE"
       [[ -n "$TAB_ID" ]] && herdr tab close "$TAB_ID" 2>/dev/null || true
     else
-      "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1 | tee "$ITER_OUT" || RUN_RC=$?
-      OUTPUT=$(cat "$ITER_OUT") || true
-      rm -f "$ITER_OUT"
+      "$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1 || RUN_RC=$?
     fi
   else
     OUTPUT=$("$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
