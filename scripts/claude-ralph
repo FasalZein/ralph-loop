@@ -12,7 +12,7 @@ exec claude \
   --append-system-prompt "You are a coding agent in a Ralph loop. Do one unit of work per iteration. Read files, make changes, run tests. Be terse. When done, emit the completion tag you were given." \
   --strict-mcp-config \
   --mcp-config '{"mcpServers":{}}' \
-  --settings '{"enabledPlugins":{}}' \
+  --settings '{"enabledPlugins":{"ralph-loop":false}}' \
   --tools "Bash,Read,Edit,Write,Skill" \
   --exclude-dynamic-system-prompt-sections \
   "$@"
