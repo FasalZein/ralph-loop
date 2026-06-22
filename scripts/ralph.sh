@@ -173,16 +173,33 @@ Do NOT emit unless truly done."
   fi
   echo ""
 
-  # Check promise
-  if [[ -n "$COMPLETION_PROMISE" ]]; then
-    if echo "$OUTPUT" | grep -qF "<promise>$COMPLETION_PROMISE</promise>"; then
-      echo "✅ Complete at iteration $i"
+  # Check promise — custom COMPLETION_PROMISE still means "done".
+  if [[ -n "$COMPLETION_PROMISE" ]] && echo "$OUTPUT" | grep -qF "<promise>$COMPLETION_PROMISE</promise>"; then
+    echo "✅ Complete at iteration $i"
+    sed -i.bak 's/^running: .*/running: false/' "$STATE_FILE"
+    sed -i.bak 's/^stop_reason: .*/stop_reason: complete/' "$STATE_FILE"
+    rm -f "$STATE_FILE.bak"
+    exit 0
+  fi
+
+  # Standard promise tags: last one wins. COMPLETE=done, STOP=stuck, NEXT=continue.
+  PROMISE=$(echo "$OUTPUT" | grep -oE '<promise>(NEXT|STOP|COMPLETE)</promise>' | tail -1 | grep -oE 'NEXT|STOP|COMPLETE' || true)
+  case "$PROMISE" in
+    COMPLETE)
+      echo "✅ Complete at iteration $i (<promise>COMPLETE</promise>)"
       sed -i.bak 's/^running: .*/running: false/' "$STATE_FILE"
       sed -i.bak 's/^stop_reason: .*/stop_reason: complete/' "$STATE_FILE"
       rm -f "$STATE_FILE.bak"
-      exit 0
-    fi
-  fi
+      exit 0 ;;
+    STOP)
+      echo "🛑 Stuck at iteration $i (<promise>STOP</promise>)"
+      sed -i.bak 's/^running: .*/running: false/' "$STATE_FILE"
+      sed -i.bak 's/^stop_reason: .*/stop_reason: stuck/' "$STATE_FILE"
+      rm -f "$STATE_FILE.bak"
+      exit 1 ;;
+    NEXT)
+      echo "→ NEXT (iteration $i done)" ;;
+  esac
 done
 
 echo "🛑 Max iterations ($MAX_ITERATIONS) reached"
