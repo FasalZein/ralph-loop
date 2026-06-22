@@ -32,3 +32,16 @@ promises are validated against deltas captured before each run:
   NEXT just warns. Both bump error_count via new bump_errors() helper.
 Backward-compatible: no items.json → gates skipped entirely.
 Files: scripts/ralph.sh. Verified: bash -n, --help, jq fixture delta test.
+
+## Iteration 4 — Control skills (stop/status/resume/restart)
+Added four user-facing SKILL.md control commands under skills/:
+- ralph-stop: touches .ralph/.stop sentinel (graceful, loop checks between iters).
+- ralph-status: prints loop.md frontmatter + .stop flag + tail of progress.md.
+- ralph-resume: relaunches ralph.sh @.ralph/prompt.md, progress.md PRESERVED;
+  guards against an already-running loop; reuses prior max_iterations.
+- ralph-restart: same launch but first resets progress.md to empty header and
+  clears items.json done flags via jq. Notes it does NOT revert git commits.
+Decision: resume/restart relaunch ralph.sh (which resets iteration:0); real
+progress lives in progress.md + git, so the counter reset is cosmetic. Kept lazy
+— no new ralph.sh flags needed. Verified jq/sed snippets on a fixture.
+Files: skills/ralph-stop/, ralph-status/, ralph-resume/, ralph-restart/.
