@@ -40,20 +40,46 @@ What "done" means. No placeholders. Full implementations.
 
 ### `.ralph/items.json`
 
-Machine-readable mirror of the plan. The loop validates promises against it: a
-NEXT promise must flip ≥1 item to `done`, COMPLETE requires all done. One object
-per plan item, same order, all `done: false` to start.
+Machine-readable contract (pi-ralph schema). The loop gates promises against it:
+a NEXT must flip **exactly one** item `passes` false→true, COMPLETE requires
+**all** `passes:true`. An item's `category`, `description`, and `steps` are
+**immutable** during the loop — the agent may only flip `passes` (changing them
+gets the promise rejected). One item per plan item, same order, all
+`passes: false` to start.
 
 ```json
-[
-  { "id": 1, "text": "Item description (matches plan.md)", "done": false },
-  { "id": 2, "text": "...", "done": false }
-]
+{
+  "version": 1,
+  "items": [
+    {
+      "category": "feature",
+      "description": "Item description (matches plan.md)",
+      "steps": ["concrete step", "verification step"],
+      "passes": false,
+      "regression_notes": ""
+    }
+  ],
+  "runtime_contract": {
+    "verification_gates": [{ "name": "tests", "command": "npm test" }],
+    "require_commit": true,
+    "require_progress_append": true,
+    "require_one_item_per_iteration": true
+  }
+}
 ```
+
+`verification_gates` are commands the **agent** runs to prove an item works — the
+loop never executes them. The `require_*` flags turn on the matching runtime
+gate (commit made / progress appended). Legacy `[{id,text,done}]` files are
+rejected — regenerate with this schema.
 
 ### `.ralph/prompt.md`
 
 The prompt fed EVERY iteration:
+
+> Note: in bundle mode `ralph.sh` generates the per-iteration instructions
+> itself (including the promise rules), so a hand-written `prompt.md` is optional.
+> When you do write one, match the rhythm below.
 
 ```markdown
 @.ralph/plan.md @.ralph/progress.md
@@ -62,19 +88,22 @@ You are in a Ralph loop. Each iteration is a fresh context window.
 
 1. Read .ralph/plan.md and .ralph/progress.md to see what's done
 2. Run: git log --oneline -10
-3. Choose the HIGHEST PRIORITY incomplete item
+3. Choose the HIGHEST PRIORITY item whose passes is false
 4. Implement it fully — no placeholders, no shortcuts, no stubs
 5. Before changing anything, search the codebase — don't assume not implemented
 6. Run verification: [EXACT COMMANDS]
 7. If tests fail, fix before moving on
 8. Append to .ralph/progress.md: what you did, decisions, files changed
-9. Flip your item's "done" to true in .ralph/items.json (jq)
+9. Flip ONLY that item's "passes" to true in .ralph/items.json (jq). Never edit
+   any item's category, description, or steps.
 10. git add changed files, git commit with descriptive message
 
 ONE item per iteration. Do NOT skip ahead.
 
-When ALL items are complete and verified:
-  <promise>COMPLETE</promise>
+Emit EXACTLY ONE control tag as the LAST line of your reply:
+  <promise>NEXT</promise>     — one item completed this iteration
+  <promise>COMPLETE</promise> — every item now passes
+  <promise>STOP</promise>     — blocked, cannot proceed
 ```
 
 ### `.ralph/progress.md`
@@ -154,12 +183,13 @@ fi
 ```
 
 **Restart** — like resume but **discards** progress first (clears `progress.md`
-and `items.json` done flags). Does NOT revert git commits — reset git separately.
+and resets every item's `passes` to false). Does NOT revert git commits — reset
+git separately.
 
 ```bash
-rm -f .ralph/.stop
+rm -f .ralph/.stop .ralph/.rejection .ralph/.killed
 printf '# Progress\n\n<!-- Each iteration appends here. Keep entries concise. -->\n' > .ralph/progress.md
-[[ -f .ralph/items.json ]] && jq 'map(.done = false)' .ralph/items.json > .ralph/items.json.tmp && mv .ralph/items.json.tmp .ralph/items.json
+[[ -f .ralph/items.json ]] && jq '.items |= map(.passes = false)' .ralph/items.json > .ralph/items.json.tmp && mv .ralph/items.json.tmp .ralph/items.json
 N="$(sed -n 's/^max_iterations: //p' .ralph/loop.md 2>/dev/null | head -1)"
 "${CLAUDE_PLUGIN_ROOT}/scripts/ralph.sh" @.ralph/prompt.md -c COMPLETE -n "${N:-20}"
 ```

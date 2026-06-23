@@ -23,8 +23,13 @@ This session (main claude) ─── creates plan ──► .ralph/ bundle
                               └── iter N: ... until promise or max iterations
 ```
 
-- **`ralph.sh`** — the bash loop. Runs iterations, validates promises, tracks
-  state in `.ralph/loop.md`, stops on a sentinel or when the promise is met.
+- **`ralph.sh`** — the bash loop. Runs each iteration as a streamed
+  (`--output-format stream-json`) subprocess under an **idle watchdog** (kills an
+  iteration after `--idle-timeout` seconds of no output and retries it with
+  exponential backoff, up to `--max-retries`), gates each promise against
+  `items.json`, tracks state in `.ralph/loop.md`, appends transitions to
+  `.ralph/events.log`, and stops on a sentinel or terminal promise. A PID lock
+  refuses a second loop in the same workspace.
 - **`claude-ralph`** — a lean per-iteration wrapper: no plugins/MCP, tools
   limited to Bash/Read/Edit/Write/Skill, low reasoning effort.
 
@@ -56,8 +61,11 @@ one iteration), writes a `.ralph/` bundle (`plan.md`, `items.json`, `prompt.md`,
 /ralph-loop build a REST API for todos with tests
 ```
 
-The loop validates each iteration's promise against `items.json`: a `NEXT`
-promise must flip ≥1 item to done; `COMPLETE` requires all items done.
+The loop gates each iteration's promise against `items.json` (pi-ralph schema):
+a `NEXT` must flip **exactly one** item's `passes` false→true and leave every
+item's `category`/`description`/`steps` unchanged; `COMPLETE` requires **all**
+items `passes:true`; `STOP` ends the loop as blocked. A rejected promise is
+re-prompted into the next fresh iteration (up to `--max-retries`).
 
 ### Mode 2 — Direct loop (quick tasks)
 
@@ -72,12 +80,14 @@ For a focused task that doesn't need a plan:
 | Flag | Meaning |
 |------|---------|
 | `-n MAX` | max iterations (default 30) |
-| `-c PROMISE` | completion promise the loop watches for (e.g. `DONE`, `COMPLETE`) |
-| `--budget USD` | per-iteration USD cap (default 2) |
+| `-c PROMISE` | completion promise the loop watches for in direct mode (e.g. `DONE`) |
+| `--idle-timeout SEC` | kill an iteration after this much output silence (default 600) |
+| `--max-retries N` | provider-wait / rejection ceiling (default 5) |
 | `--model MODEL` | model for iterations |
 | `--effort LEVEL` | reasoning effort |
 | `--verbose` | full output per iteration |
 | `--dry-run` | print iteration 1 prompt and exit (debug prompts) |
+| `--budget USD` | **deprecated** — accepted and ignored (no per-token billing on subscription) |
 
 ### Control operations
 
@@ -89,8 +99,8 @@ inline command:
 - **Stop** — drops `.ralph/.stop`; the current iteration finishes, then the loop
   halts gracefully. (Hard kill: `Ctrl-C` the loop's terminal.)
 - **Resume** — relaunches against the existing bundle, keeping `progress.md`.
-- **Restart** — relaunches but clears `progress.md` and resets `items.json` done
-  flags. Does **not** revert git commits — reset those separately.
+- **Restart** — relaunches but clears `progress.md` and resets every item's
+  `passes` to false. Does **not** revert git commits — reset those separately.
 
 ## Writing good loops
 
