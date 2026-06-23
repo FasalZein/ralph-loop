@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ralph Loop — spawns isolated claude processes per iteration.
+# Ralph Loop — spawns isolated claude-ralph processes per iteration.
 # Each iteration = fresh context. Zero token bleed to parent.
 # ponytail: bash loop, state on disk, promise grep. That's it.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CLAUDE_RALPH="${CLAUDE_RALPH_PATH:-$SCRIPT_DIR/claude-ralph}"
 
 MAX_ITERATIONS=30
 COMPLETION_PROMISE=""
@@ -58,6 +61,12 @@ if [[ "$PROMPT" == @* ]]; then
   PROMPT_FILE="${PROMPT#@}"
   [[ -f "$PROMPT_FILE" ]] || { echo "❌ Prompt file not found: $PROMPT_FILE" >&2; exit 1; }
   PROMPT="$(cat "$PROMPT_FILE")"
+fi
+
+# Resolve claude-ralph
+if [[ ! -x "$CLAUDE_RALPH" ]]; then
+  CLAUDE_RALPH="$(command -v claude-ralph 2>/dev/null || true)"
+  [[ -z "$CLAUDE_RALPH" ]] && { echo "❌ claude-ralph not found. Check CLAUDE_RALPH_PATH or install." >&2; exit 1; }
 fi
 
 # State
@@ -203,22 +212,16 @@ Do NOT emit unless truly done."
     B_PROG=$(wc -l < "$PROGRESS_FILE")
   fi
 
-  # Run — fresh process, fresh context, zero parent bleed.
-  # Inlined lean claude: no plugins, no MCP, minimal system prompt; Skill tool on for discovery.
-  RUN_RC=0
-  OUTPUT=$(claude \
-    --dangerously-skip-permissions \
-    --model "${MODEL:-claude-opus-4-8[1m]}" \
-    --effort "${EFFORT:-low}" \
-    --append-system-prompt "You are a coding agent in a Ralph loop. Do one unit of work per iteration. Read files, make changes, run tests. Be terse. When done, emit the completion tag you were given." \
-    --strict-mcp-config \
-    --mcp-config '{"mcpServers":{}}' \
-    --settings '{"enabledPlugins":{"ralph-loop":false}}' \
-    --tools "Bash,Read,Edit,Write,Skill" \
-    --exclude-dynamic-system-prompt-sections \
-    -p "$ITER_PROMPT" --max-budget-usd "$BUDGET" 2>&1) || RUN_RC=$?
+  # Build args
+  RALPH_ARGS=(-p "$ITER_PROMPT" --max-budget-usd "$BUDGET")
+  [[ -n "$MODEL" ]] && export CLAUDE_RALPH_MODEL="$MODEL"
+  [[ -n "$EFFORT" ]] && export CLAUDE_RALPH_EFFORT="$EFFORT"
 
-  # Track iteration errors (non-zero claude exit).
+  # Run — fresh process, fresh context, zero parent bleed
+  RUN_RC=0
+  OUTPUT=$("$CLAUDE_RALPH" "${RALPH_ARGS[@]}" 2>&1) || RUN_RC=$?
+
+  # Track iteration errors (non-zero claude-ralph exit).
   if [[ "$RUN_RC" -ne 0 ]]; then
     bump_errors
     echo "⚠️  iteration $i exited $RUN_RC (error_count: $ERROR_COUNT)"
