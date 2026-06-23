@@ -296,7 +296,9 @@ run_iteration() {
 }
 
 # ── Parse final stream-json result event ─────────────────────────────────────
-R_TEXT=""; R_IS_ERROR=false; R_SUBTYPE=""; R_COST=0; R_TURNS=0
+# total_cost_usd is intentionally ignored: it's notional on a subscription (see
+# build spec §6 — budget dropped). num_turns is a real work signal, so we keep it.
+R_TEXT=""; R_IS_ERROR=false; R_SUBTYPE=""; R_TURNS=0
 parse_result() {
   local out="$1" rj
   rj="$(jq -c 'select(.type=="result")' "$out" 2>/dev/null | tail -1 || true)"
@@ -304,10 +306,9 @@ parse_result() {
     R_TEXT="$(jq -r '.result // empty' <<<"$rj" 2>/dev/null || true)"
     R_IS_ERROR="$(jq -r '.is_error // false' <<<"$rj" 2>/dev/null || echo false)"
     R_SUBTYPE="$(jq -r '.subtype // empty' <<<"$rj" 2>/dev/null || true)"
-    R_COST="$(jq -r '.total_cost_usd // 0' <<<"$rj" 2>/dev/null || echo 0)"
     R_TURNS="$(jq -r '.num_turns // 0' <<<"$rj" 2>/dev/null || echo 0)"
   else
-    R_TEXT=""; R_IS_ERROR=true; R_SUBTYPE="no_result_event"; R_COST=0; R_TURNS=0
+    R_TEXT=""; R_IS_ERROR=true; R_SUBTYPE="no_result_event"; R_TURNS=0
   fi
 }
 
@@ -429,12 +430,12 @@ for ((i=1; i<=MAX_ITERATIONS; i++)); do
         else
           clear_rejection
           changed="$(git diff --stat 'HEAD@{1}..HEAD' 2>/dev/null | tail -1 | sed 's/^[[:space:]]*//' || true)"
-          echo "→ NEXT (iteration $i) — \$$R_COST, $R_TURNS turns"
-          log_event "iter $i NEXT — \$$R_COST, $R_TURNS turns — ${changed:-no diff}"
+          echo "→ NEXT (iteration $i) — $R_TURNS turns"
+          log_event "iter $i NEXT — $R_TURNS turns — ${changed:-no diff}"
         fi
       else
-        echo "→ iteration $i done — \$$R_COST, $R_TURNS turns"
-        log_event "iter $i done — \$$R_COST, $R_TURNS turns"
+        echo "→ iteration $i done — $R_TURNS turns"
+        log_event "iter $i done — $R_TURNS turns"
       fi ;;
   esac
 done
