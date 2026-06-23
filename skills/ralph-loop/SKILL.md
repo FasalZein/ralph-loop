@@ -147,14 +147,29 @@ Details live in `.ralph/loop.md` and `.ralph/progress.md`.
 
 Run these inline when the user asks to check, stop, resume, or restart a loop.
 
-**Status** — read runtime state, then summarize `running`, `iteration` vs
-`max_iterations`, `error_count`, and `stop_reason`:
+**Status** — the blessed liveness check. Reports runtime state AND whether the
+worker is actually alive and streaming. Trust this, never `pgrep` (see Process
+model below for why `pgrep claude-ralph` is always empty):
 
 ```bash
 if [[ ! -f .ralph/loop.md ]]; then
   echo "No .ralph/loop.md — no loop has run here."
 else
   sed -n '/^---$/,/^---$/p' .ralph/loop.md | sed '/^---$/d'
+  pid="$(sed -n 's/^owner_pid: //p' .ralph/loop.md | head -1)"
+  if grep -q '^running: true' .ralph/loop.md; then
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      echo "owner_pid $pid: ALIVE"
+      if [[ -f .ralph/.iter.out ]]; then
+        age=$(( $(date +%s) - $(stat -f %m .ralph/.iter.out 2>/dev/null || stat -c %Y .ralph/.iter.out) ))
+        bytes="$(wc -c < .ralph/.iter.out | tr -d ' ')"
+        [[ $age -lt 60 ]] && hint="streaming" || hint="quiet — long tool call or stalled"
+        echo "worker stream: ${bytes}B, last write ${age}s ago ($hint)"
+      fi
+    else
+      echo "owner_pid $pid: DEAD — loop crashed without finalizing (stale running:true)"
+    fi
+  fi
   [[ -f .ralph/.stop ]] && echo "stop_requested: true"
   echo "── progress (last 25) ──"; tail -n 25 .ralph/progress.md 2>/dev/null
 fi
@@ -206,3 +221,20 @@ This session (main claude) ─── creates plan ──► .ralph/ bundle
 
 - `claude-ralph`: lean wrapper — no plugins/MCP, Bash/Read/Edit/Write/Skill, effort:low
 - `--dry-run` prints the assembled iteration-1 prompt and exits (debug prompts before looping)
+
+### Process model (recognising a healthy loop)
+
+Reason about a running loop from these facts, not from `pgrep`:
+
+- **The wrapper *becomes* the worker.** `claude-ralph` ends in `exec claude`, so
+  the iteration runs as a plain `claude` process — `pgrep claude-ralph` is
+  **always empty**, and that is not a dead worker.
+- **Two `ralph.sh` PIDs is one loop.** The driver spawns its idle-watchdog as a
+  subshell that shares the script name. Two PIDs = driver + watchdog, not two loops.
+- **`.ralph/.iter.out` is the live worker stream.** `tail -f .ralph/.iter.out`
+  watches the current iteration in real time; `Status` reports its activity.
+
+The watchdog measures **output silence**, not wall-clock. A single long, quiet
+shell command (a big `build && test`) emits no stream output and counts as
+silence; if one tool call runs longer than `--idle-timeout` (default 600s) the
+watchdog kills a healthy worker. Raise `--idle-timeout` for build-heavy repos.
