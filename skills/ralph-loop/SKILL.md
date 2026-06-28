@@ -19,7 +19,7 @@ PLAN FIRST. Decompose into small, independent items — each item = one iteratio
 1. Discuss scope, then explore the codebase for existing patterns/conventions.
 2. Write the bundle files below.
 3. **Show the plan and get approval** before running the loop.
-4. Execute: `"${CLAUDE_PLUGIN_ROOT}/scripts/ralph.sh" @.ralph/prompt.md -c COMPLETE -n 20`
+4. Execute **in the background** (see Running & watching): `"${CLAUDE_PLUGIN_ROOT}/scripts/ralph.sh" @.ralph/prompt.md -c COMPLETE -n 20`
 
 ### `.ralph/plan.md`
 
@@ -138,10 +138,28 @@ Only use this when the user passes explicit flags like `-c DONE -n 10`:
 - If the user passes flags (`-c`, `-n`, `@.ralph/prompt.md`) → **Mode 2** (direct loop)
 - If unsure → **Mode 1** (plan is always safer)
 
-## After completion
+## Running & watching
 
-Report: how many iterations ran, whether the promise was fulfilled or max hit.
-Details live in `.ralph/loop.md` and `.ralph/progress.md`.
+Launch the loop in the **background** (set `run_in_background` on the Bash call).
+That keeps this session responsive AND makes the harness notify you the moment
+`ralph.sh` exits — that notification is your "loop is done" signal. Do NOT run it
+foreground and block the session waiting.
+
+While it runs, watch it live with **`ralph.sh watch`** — a readable feed that
+merges the loop's decisions (`events.log`) with the current worker's stream,
+pretty-printed (tool calls, text, results, iteration boundaries), and survives
+each iteration's stream rollover:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/ralph.sh" watch
+```
+
+For a one-shot snapshot instead of a live feed, use the **Status** op below.
+Check in periodically; don't poll tightly.
+
+When you get the exit notification, read `.ralph/loop.md` (`stop_reason`:
+complete / stuck / error / max_iterations) and `tail -n 25 .ralph/progress.md`,
+then report: iterations run, whether the promise was fulfilled, and what changed.
 
 ## Control operations
 

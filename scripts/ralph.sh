@@ -19,6 +19,42 @@ VERBOSE=false
 DRY_RUN=false
 PROMPT_PARTS=()
 
+# ── `ralph.sh watch [DIR]` — live, readable view of a running loop ────────────
+# Read-only. Merges two streams into one chronological feed, both followed with
+# -F so they survive the per-iteration truncation of .iter.out:
+#   • events.log  → the loop's own decisions (NEXT/COMPLETE/reject/fail), full history
+#   • .iter.out   → the current worker's stream-json, pretty-printed live
+# Non-JSON lines (events) render as [loop]; JSON lines (worker) are formatted.
+# ponytail: a FIFO merges both tails so a single long-lived jq formats everything
+# and we hold both tail PIDs directly for a clean Ctrl-C (no process-group kill).
+# Ceiling: lines >PIPE_BUF (~4KB, e.g. a huge tool input) could interleave; rare,
+# cosmetic only (a garbled line shows as [loop]).
+if [[ "${1:-}" == watch ]]; then
+  command -v jq >/dev/null 2>&1 || { echo "❌ jq is required (brew install jq)." >&2; exit 1; }
+  SD="${2:-.ralph}"
+  [[ -f "$SD/loop.md" ]] || { echo "❌ No $SD/loop.md — run this from the loop's workspace root." >&2; exit 1; }
+  touch "$SD/.iter.out" "$SD/events.log"
+  FIFO="$SD/.watch.fifo"; rm -f "$FIFO"; mkfifo "$FIFO"
+  tail -n +1 -F "$SD/events.log" 2>/dev/null > "$FIFO" & WP1=$!
+  tail -n +1 -F "$SD/.iter.out"  2>/dev/null > "$FIFO" & WP2=$!
+  jq -Rr --unbuffered '
+    (try fromjson catch null) as $j |
+    if ($j|type) != "object" then "  [loop] " + .
+    elif $j.type=="system" and $j.subtype=="init" then "── iteration start (\($j.model))"
+    elif $j.type=="assistant" then ($j.message.content[]? |
+          if .type=="text" then (.text | select(length>0))
+          elif .type=="tool_use" then "  → \(.name): \((.input|tojson)[0:100])"
+          else empty end)
+    elif $j.type=="user" then ($j.message.content[]? | select(.type=="tool_result") |
+          "    ✓ \((.content | if type=="array" then (.[0].text? // "result") else tostring end)[0:80])")
+    elif $j.type=="result" then "── iteration done: \($j.subtype) (\($j.num_turns) turns)"
+    else empty end' < "$FIFO" & WJQ=$!
+  trap 'kill "$WP1" "$WP2" "$WJQ" 2>/dev/null || true; rm -f "$FIFO"' INT TERM EXIT
+  echo "👁  watching $SD — Ctrl-C to stop"
+  wait "$WJQ" || true
+  exit 0
+fi
+
 while [[ $# -gt 0 ]]; do
   case $1 in
     --max-iterations|-n) MAX_ITERATIONS="$2"; shift 2 ;;
@@ -37,6 +73,7 @@ ralph-loop — iterate a task with isolated claude sessions (bash port of pi-ral
 
 Usage: /ralph-loop PROMPT [options]
        /ralph-loop @.ralph/prompt.md [options]
+       ralph.sh watch [DIR]          Live readable view of a running loop (default .ralph)
 
 Options:
   -n, --max-iterations N       Cap iterations (default: 30)
@@ -325,29 +362,18 @@ build_prompt() {
     ITER_PROMPT+=$'\n\n## ⚠️ The previous promise was REJECTED by the gate\n'"$(cat "$REJECT_FILE")"$'\nFix this before emitting another promise.'
   fi
   if [[ "$BUNDLE_MODE" == true ]]; then
-    ITER_PROMPT+=$'\n\n## Instructions
-You are in a fresh session — no memory of prior iterations.
-1. Read .ralph/progress.md and run `git log --oneline -10` to orient.
-2. Pick the HIGHEST-PRIORITY item whose passes is false.
-3. Before changing anything, search the codebase — do not assume it is not implemented.
-4. Implement exactly ONE item fully — no placeholders, no shortcuts, no stubs.
-5. Run its verification steps; if they fail, fix before continuing.
-6. Append a concise entry to .ralph/progress.md (append only — do not edit prior entries).
-7. In .ralph/items.json, flip ONLY that item'\''s "passes" to true (use jq). Never change any item'\''s category, description, or steps.
-8. git add the changed files and commit with a descriptive message.
+    ITER_PROMPT+=$'\n\n## This bundle (follow your standing loop instructions)
+- Pick the HIGHEST-PRIORITY item whose passes is false; complete exactly that one.
+- In .ralph/items.json, flip ONLY that item'\''s "passes" to true (use jq). Never change any item'\''s category, description, or steps.
+- Append a concise entry to .ralph/progress.md (append only — do not edit prior entries).
 
 Emit EXACTLY ONE control tag as the LAST line of your reply (nothing after it):
   <promise>NEXT</promise>     — you completed one item this iteration
   <promise>COMPLETE</promise> — every item now passes
   <promise>STOP</promise>     — you are blocked and cannot proceed'
   else
-    ITER_PROMPT+=$'\n\n## Instructions
-You are in a fresh session — no memory of prior iterations.
-1. Read .ralph/progress.md and run `git log --oneline -10` to orient.
-2. Do the next unit of work toward the task — implement fully, no placeholders.
-3. Run verification if applicable; fix failures before continuing.
-4. Append a concise entry to .ralph/progress.md.
-5. git add the changed files and commit with a descriptive message.'
+    ITER_PROMPT+=$'\n\n## This task (follow your standing loop instructions)
+Do the next unit of work toward the task, then append a concise entry to .ralph/progress.md and commit.'
     [[ -n "$COMPLETION_PROMISE" ]] && ITER_PROMPT+=$'\n\nWhen the task is fully done, emit as the LAST line: <promise>'"$COMPLETION_PROMISE"$'</promise> (do not emit until truly done).'
   fi
 }

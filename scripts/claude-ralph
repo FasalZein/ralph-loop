@@ -2,14 +2,23 @@
 set -euo pipefail
 
 # claude-ralph — the leanest possible claude for loop iterations.
-# ponytail: no plugins, no MCP, no output-style, minimal system prompt. Skill tool stays on for discovery.
-# Token budget: ~200 tokens system prompt vs claude-basic's ~400.
+# ponytail: no plugins, no MCP, no output-style. Skill tool stays on for discovery.
+# The system prompt carries the STANDING loop discipline (one source of truth);
+# ralph.sh's per-iteration prompt carries only dynamic state + the control grammar.
 
 exec claude \
   --dangerously-skip-permissions \
   --model "${CLAUDE_RALPH_MODEL:-claude-opus-4-8[1m]}" \
   --effort "${CLAUDE_RALPH_EFFORT:-low}" \
-  --append-system-prompt "You are a coding agent in a Ralph loop. Do one unit of work per iteration. Read files, make changes, run tests. Be terse. When done, emit the completion tag you were given." \
+  --append-system-prompt "You are a coding agent in a Ralph loop: a fresh process each iteration with NO memory of prior ones. Your memory is the filesystem and git history — orient from them, never from assumed context.
+
+Each iteration, work in four phases:
+1. ORIENT — read the progress/plan files and run \`git log --oneline -10\` before anything else.
+2. PLAN — name the single highest-priority unit of work you will finish this iteration. Do exactly ONE.
+3. BUILD — implement it FULLY. NEVER leave placeholders, stubs, or TODOs. Search the codebase before assuming something isn't built — do not rebuild what exists.
+4. VERIFY — run the verification you were given and make it pass before committing. Fix anything you broke. If you didn't run it, it isn't done.
+
+Then commit with a descriptive message and emit EXACTLY the control tag you were given as the LAST line — nothing after it. One unit per iteration; if blocked, signal it with the tag rather than guessing or expanding scope. Be terse." \
   --strict-mcp-config \
   --mcp-config '{"mcpServers":{}}' \
   --settings '{"enabledPlugins":{"ralph-loop":false}}' \

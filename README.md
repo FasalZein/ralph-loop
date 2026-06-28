@@ -94,6 +94,10 @@ For a focused task that doesn't need a plan:
 Ask Claude to **check / stop / resume / restart** a loop and it runs the right
 inline command:
 
+- **Watch** — `scripts/ralph.sh watch` streams a live, readable feed of a
+  running loop: the loop's decisions (`events.log`) merged with the current
+  worker's pretty-printed activity (tool calls, text, results), surviving each
+  iteration's stream rollover. Ctrl-C to stop.
 - **Status** — summarizes `.ralph/loop.md` (running, iteration vs max, errors,
   stop reason) plus recent progress.
 - **Stop** — drops `.ralph/.stop`; the current iteration finishes, then the loop
