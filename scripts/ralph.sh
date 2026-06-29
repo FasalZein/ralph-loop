@@ -352,6 +352,10 @@ parse_result() {
 # ── Build the per-iteration prompt ───────────────────────────────────────────
 build_prompt() {
   ITER_PROMPT="Ralph loop iteration $ST_ITER/$MAX_ITERATIONS."
+  # The lean wrapper strips Claude Code's auto cwd hint, so state it explicitly —
+  # without this the worker invents absolute paths and thrashes (dogfood: 10 turns
+  # on a 1-file task). All relative paths (incl. .ralph/) resolve under this dir.
+  ITER_PROMPT+=$'\n\nWorking directory: '"$PWD"$' — use paths relative to it; do not construct absolute paths to other locations.'
   [[ -f "$STATE_DIR/plan.md" ]] && ITER_PROMPT+=$'\n\n## Plan\n'"$(cat "$STATE_DIR/plan.md")"
   ITER_PROMPT+=$'\n\n## Progress so far\n'"$(cat "$PROGRESS_FILE")"
   if [[ "$BUNDLE_MODE" == true ]]; then
